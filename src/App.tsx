@@ -1,9 +1,11 @@
+import { useAuth } from "@/hooks/useAuth";
+import { LoginScreen } from "@/components/LoginScreen";
+import { SessionScreen } from "@/components/SessionScreen";
+
 function App() {
-  return (
-    <div className="flex min-h-svh items-center justify-center">
-      <h1 className="text-4xl font-bold tracking-tight">Gym Tracker</h1>
-    </div>
-  )
+  const { user } = useAuth();
+
+  return user ? <SessionScreen /> : <LoginScreen />;
 }
 
-export default App
+export default App;
