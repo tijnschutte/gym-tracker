@@ -54,15 +54,58 @@ function loadGisScript(): Promise<void> {
   })
 }
 
+// ---- localStorage persistence ----------------------------------------------
+
+const AUTH_STORAGE_KEY = 'gym-tracker-auth'
+
+interface StoredAuth {
+  user: UserInfo
+  idToken: string
+}
+
+function loadStoredAuth(): StoredAuth | null {
+  try {
+    const raw = localStorage.getItem(AUTH_STORAGE_KEY)
+    if (!raw) return null
+    const parsed = JSON.parse(raw) as StoredAuth
+    if (!parsed.user?.sub || !parsed.idToken) return null
+    // Check token expiry — discard if expired
+    const payload = decodeJwtPayload(parsed.idToken)
+    const exp = (payload.exp as number) * 1000
+    if (Date.now() >= exp) return null
+    return parsed
+  } catch {
+    return null
+  }
+}
+
+function storeAuth(user: UserInfo, idToken: string): void {
+  try {
+    localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify({ user, idToken }))
+  } catch {
+    // quota exceeded, private browsing, etc.
+  }
+}
+
+function clearStoredAuth(): void {
+  try {
+    localStorage.removeItem(AUTH_STORAGE_KEY)
+  } catch {
+    // ignore
+  }
+}
+
 // ---- Provider --------------------------------------------------------------
 
-/** Derive initial loading & error state so the effect never sets state synchronously. */
 const missingClientId = !GOOGLE_CLIENT_ID
+const restoredAuth = missingClientId ? null : loadStoredAuth()
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<UserInfo | null>(null)
-  const [idToken, setIdToken] = useState<string | null>(null)
-  const [loading, setLoading] = useState(!missingClientId)
+  const [user, setUser] = useState<UserInfo | null>(restoredAuth?.user ?? null)
+  const [idToken, setIdToken] = useState<string | null>(
+    restoredAuth?.idToken ?? null,
+  )
+  const [loading, setLoading] = useState(!missingClientId && !restoredAuth)
   const [error, setError] = useState<string | null>(
     missingClientId
       ? 'Missing VITE_GOOGLE_CLIENT_ID. Add it to your .env.local file.'
@@ -73,12 +116,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     (response: google.accounts.id.CredentialResponse) => {
       try {
         const payload = decodeJwtPayload(response.credential)
-        setUser({
+        const newUser: UserInfo = {
           sub: payload.sub as string,
           email: payload.email as string,
           name: (payload.name as string) ?? (payload.email as string),
-        })
+        }
+        setUser(newUser)
         setIdToken(response.credential)
+        storeAuth(newUser, response.credential)
         setError(null)
       } catch {
         setError('Failed to decode Google credential')
@@ -99,6 +144,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           auto_select: true,
           use_fedcm_for_prompt: true,
         })
+        // Trigger One Tap prompt — auto_select will silently sign in
+        // if there's an existing session, avoiding a login redirect.
+        google.accounts.id.prompt()
         setLoading(false)
       })
       .catch(() => {
@@ -122,6 +170,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     setUser(null)
     setIdToken(null)
+    clearStoredAuth()
   }, [user])
 
   return (
