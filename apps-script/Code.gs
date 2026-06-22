@@ -62,8 +62,7 @@ function doPost(e) {
     }
 
     if (action === 'save') {
-      // Placeholder — will be implemented in issue #7
-      return _jsonResponse({ success: true })
+      return _handleSave(userSub, userEmail, userName, body.data)
     }
 
     return _jsonResponse({ error: 'Unknown action: ' + action }, 400)
@@ -106,6 +105,107 @@ function _handleGetExercises(userSub) {
   }
 
   return _jsonResponse({ exercises: exercises })
+}
+
+/**
+ * Saves a workout session: upserts the pivot tab and appends to the log tab.
+ *
+ * @param {string} userSub   - Google `sub` claim.
+ * @param {string} userEmail - User email from the token.
+ * @param {string} userName  - User display name from the token.
+ * @param {object} data      - { sessionId: string, exercises: { name, kg, notes? }[] }
+ * @returns {GoogleAppsScript.Content.TextOutput}
+ */
+function _handleSave(userSub, userEmail, userName, data) {
+  if (!data || !data.sessionId || !Array.isArray(data.exercises) || data.exercises.length === 0) {
+    return _jsonResponse({ error: 'Invalid session data' }, 400)
+  }
+
+  var ss = SpreadsheetApp.getActiveSpreadsheet()
+  var tz = ss.getSpreadsheetTimeZone()
+  var now = new Date()
+  var dateStr = Utilities.formatDate(now, tz, 'dd/MM/yyyy')
+  var dateOnly = Utilities.formatDate(now, tz, 'yyyy-MM-dd')
+  var isoNow = now.toISOString()
+
+  // ---- Pivot tab ------------------------------------------------------------
+  var pivotSheet = ss.getSheetByName('pivot')
+  if (!pivotSheet) {
+    pivotSheet = ss.insertSheet('pivot')
+    pivotSheet.appendRow(['user_sub', 'exercise'])
+  }
+
+  var pivotData = pivotSheet.getDataRange().getValues()
+  var headers = pivotData[0]
+
+  // Find or create the date column
+  var dateColIndex = -1
+  for (var c = 2; c < headers.length; c++) {
+    var headerVal = headers[c]
+    if (headerVal instanceof Date) {
+      headerVal = Utilities.formatDate(headerVal, tz, 'dd/MM/yyyy')
+    }
+    if (String(headerVal) === dateStr) {
+      dateColIndex = c
+      break
+    }
+  }
+  if (dateColIndex === -1) {
+    dateColIndex = headers.length
+    pivotSheet.getRange(1, dateColIndex + 1).setValue(dateStr)
+  }
+
+  // Upsert each exercise row
+  for (var i = 0; i < data.exercises.length; i++) {
+    var exerciseName = data.exercises[i].name
+    var kg = data.exercises[i].kg
+    var rowIndex = -1
+
+    for (var r = 1; r < pivotData.length; r++) {
+      if (String(pivotData[r][0]) === userSub && String(pivotData[r][1]) === exerciseName) {
+        rowIndex = r
+        break
+      }
+    }
+
+    if (rowIndex === -1) {
+      // New exercise — append row and update pivotData so subsequent exercises
+      // can detect it without re-reading the sheet.
+      var newRow = pivotSheet.getLastRow() + 1
+      pivotSheet.getRange(newRow, 1).setValue(userSub)
+      pivotSheet.getRange(newRow, 2).setValue(exerciseName)
+      pivotSheet.getRange(newRow, dateColIndex + 1).setValue(kg)
+      pivotData.push([userSub, exerciseName])
+    } else {
+      pivotSheet.getRange(rowIndex + 1, dateColIndex + 1).setValue(kg)
+    }
+  }
+
+  // ---- Log tab --------------------------------------------------------------
+  var logSheet = ss.getSheetByName('log')
+  if (!logSheet) {
+    logSheet = ss.insertSheet('log')
+    logSheet.appendRow([
+      'date', 'session_id', 'user_sub', 'user_email',
+      'user_name', 'exercise', 'kg', 'notes', 'created_at',
+    ])
+  }
+
+  for (var j = 0; j < data.exercises.length; j++) {
+    logSheet.appendRow([
+      dateOnly,
+      data.sessionId,
+      userSub,
+      userEmail,
+      userName,
+      data.exercises[j].name,
+      data.exercises[j].kg,
+      data.exercises[j].notes || '',
+      isoNow,
+    ])
+  }
+
+  return _jsonResponse({ success: true })
 }
 
 // =============================================================================
