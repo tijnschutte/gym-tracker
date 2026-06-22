@@ -115,7 +115,9 @@ export function ExerciseLogger({ userExercises, onAdd }: ExerciseLoggerProps) {
           </PopoverTrigger>
           <PopoverContent
             className="w-[var(--radix-popover-trigger-width)] p-0"
+            side="bottom"
             align="start"
+            avoidCollisions={false}
           >
             <Command shouldFilter={false}>
               <CommandInput
