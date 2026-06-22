@@ -8,14 +8,14 @@ Session ID is generated client-side (UUID v4) at session start.
 
 ## Acceptance criteria
 
-- [ ] Summary screen displays all exercises with their kg values in read-only format
-- [ ] "Save" button sends session data to Apps Script with the user's ID token
-- [ ] Apps Script `save` action upserts kg values into the pivot tab at the correct (user_sub, exercise, date) cell
-- [ ] Apps Script `save` action creates new rows for new exercises and new columns for new dates in the pivot tab
-- [ ] Apps Script `save` action appends one row per exercise to the log tab with all fields (date, session_id, user_sub, user_email, user_name, exercise, kg, notes, created_at)
-- [ ] On successful save: React state and localStorage are cleared, success toast is shown, app returns to empty session screen
-- [ ] On failed save: error toast is shown, session remains active, user can retry
-- [ ] Session ID is a UUID v4 generated at session start
+- [x] Summary screen displays all exercises with their kg values in read-only format
+- [x] "Save" button sends session data to Apps Script with the user's ID token
+- [x] Apps Script `save` action upserts kg values into the pivot tab at the correct (user_sub, exercise, date) cell
+- [x] Apps Script `save` action creates new rows for new exercises and new columns for new dates in the pivot tab
+- [x] Apps Script `save` action appends one row per exercise to the log tab with all fields (date, session_id, user_sub, user_email, user_name, exercise, kg, notes, created_at)
+- [x] On successful save: React state and localStorage are cleared, success toast is shown, app returns to empty session screen
+- [x] On failed save: error toast is shown, session remains active, user can retry
+- [x] Session ID is a UUID v4 generated at session start
 
 ## Blocked by
 
