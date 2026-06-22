@@ -1,78 +1,305 @@
-import { useCallback, useEffect, useState } from "react";
-import { useAuth } from "@/hooks/useAuth";
-import { fetchExercises } from "@/lib/api";
-import { Button } from "@/components/ui/button";
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { useAuth } from '@/hooks/useAuth'
+import { fetchExercises } from '@/lib/api'
+import {
+  createSession,
+  addEntry,
+  updateEntry,
+  removeEntry,
+} from '@/lib/session'
+import type { Session, SessionEntry } from '@/lib/session'
+import { saveSession, loadSession, clearSession } from '@/lib/persistence'
+import { Button } from '@/components/ui/button'
 import {
   Card,
   CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
-} from "@/components/ui/card";
-import {
-  Avatar,
-  AvatarFallback,
-} from "@/components/ui/avatar";
-import {
-  ExerciseLogger,
-  type ExerciseEntry,
-} from "@/components/ExerciseLogger";
+} from '@/components/ui/card'
+import { Avatar, AvatarFallback } from '@/components/ui/avatar'
+import { Input } from '@/components/ui/input'
+import { ExerciseLogger } from '@/components/ExerciseLogger'
+import type { ExerciseEntry } from '@/components/ExerciseLogger'
+import { X, Pencil, Check } from 'lucide-react'
+import { toast } from 'sonner'
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
 
 function getInitials(name: string): string {
   return name
-    .split(" ")
+    .split(' ')
     .map((part) => part[0])
     .slice(0, 2)
-    .join("")
-    .toUpperCase();
+    .join('')
+    .toUpperCase()
 }
 
-export function SessionScreen() {
-  const { user, idToken, signOut } = useAuth();
-  const [exercises, setExercises] = useState<string[]>([]);
-  const [exercisesLoading, setExercisesLoading] = useState(true);
-  const [exercisesError, setExercisesError] = useState<string | null>(null);
-  const [sessionEntries, setSessionEntries] = useState<ExerciseEntry[]>([]);
+type View = 'logging' | 'summary'
 
-  const loadExercises = useCallback(async () => {
-    if (!idToken) return;
+// ---------------------------------------------------------------------------
+// Resume Dialog
+// ---------------------------------------------------------------------------
 
-    setExercisesLoading(true);
-    setExercisesError(null);
+function ResumeDialog({
+  onResume,
+  onDiscard,
+}: {
+  onResume: () => void
+  onDiscard: () => void
+}) {
+  return (
+    <Card className="w-full">
+      <CardHeader>
+        <CardTitle>Resume Session?</CardTitle>
+        <CardDescription>
+          You have an unfinished session. Would you like to continue where you
+          left off?
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="flex gap-3">
+        <Button className="flex-1" onClick={onResume}>
+          Resume
+        </Button>
+        <Button className="flex-1" variant="outline" onClick={onDiscard}>
+          Start Fresh
+        </Button>
+      </CardContent>
+    </Card>
+  )
+}
 
-    try {
-      const result = await fetchExercises(idToken);
-      setExercises(result);
-      console.log("[SessionScreen] Exercises loaded:", result);
-    } catch (err) {
-      const message =
-        err instanceof Error ? err.message : "Failed to load exercises";
-      setExercisesError(message);
-      console.error("[SessionScreen] Error loading exercises:", message);
-    } finally {
-      setExercisesLoading(false);
-    }
-  }, [idToken]);
+// ---------------------------------------------------------------------------
+// Session Entry Row (with inline edit + delete)
+// ---------------------------------------------------------------------------
+
+function SessionEntryRow({
+  entry,
+  onUpdate,
+  onRemove,
+}: {
+  entry: SessionEntry
+  onUpdate: (exercise: string, kg: number) => void
+  onRemove: (exercise: string) => void
+}) {
+  const [editing, setEditing] = useState(false)
+  const [editValue, setEditValue] = useState(String(entry.kg))
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  const handleStartEdit = useCallback(() => {
+    setEditValue(String(entry.kg))
+    setEditing(true)
+  }, [entry.kg])
 
   useEffect(() => {
-    void loadExercises();
-  }, [loadExercises]);
+    if (editing) {
+      inputRef.current?.focus()
+      inputRef.current?.select()
+    }
+  }, [editing])
 
-  const handleAddEntry = useCallback((entry: ExerciseEntry) => {
-    console.log("[SessionScreen] Added entry:", entry);
-    setSessionEntries((prev) => [...prev, entry]);
-  }, []);
+  const handleConfirm = useCallback(() => {
+    const parsed = parseFloat(editValue)
+    if (!isNaN(parsed) && parsed >= 0) {
+      onUpdate(entry.exercise, parsed)
+    }
+    setEditing(false)
+  }, [editValue, entry.exercise, onUpdate])
 
-  if (!user) return null;
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      if (e.key === 'Enter') handleConfirm()
+      if (e.key === 'Escape') setEditing(false)
+    },
+    [handleConfirm],
+  )
+
+  return (
+    <li className="flex min-h-[44px] items-center justify-between gap-2 rounded-md bg-muted px-3 py-2">
+      <span className="text-sm font-medium">{entry.exercise}</span>
+
+      <div className="flex items-center gap-2">
+        {editing ? (
+          <>
+            <Input
+              ref={inputRef}
+              type="number"
+              inputMode="decimal"
+              step="0.5"
+              min="0"
+              className="h-8 w-20 text-right text-sm"
+              value={editValue}
+              onChange={(e) => setEditValue(e.target.value)}
+              onKeyDown={handleKeyDown}
+              onBlur={handleConfirm}
+            />
+            <span className="text-sm text-muted-foreground">kg</span>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8"
+              onClick={handleConfirm}
+              aria-label="Confirm edit"
+            >
+              <Check className="h-4 w-4" />
+            </Button>
+          </>
+        ) : (
+          <>
+            <span className="text-sm text-muted-foreground">{entry.kg} kg</span>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8"
+              onClick={handleStartEdit}
+              aria-label={`Edit ${entry.exercise}`}
+            >
+              <Pencil className="h-3.5 w-3.5" />
+            </Button>
+          </>
+        )}
+
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-8 w-8 text-destructive hover:text-destructive"
+          onClick={() => onRemove(entry.exercise)}
+          aria-label={`Remove ${entry.exercise}`}
+        >
+          <X className="h-4 w-4" />
+        </Button>
+      </div>
+    </li>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// SessionScreen
+// ---------------------------------------------------------------------------
+
+export function SessionScreen() {
+  const { user, idToken, signOut } = useAuth()
+  const [exercises, setExercises] = useState<string[]>([])
+  const [exercisesLoading, setExercisesLoading] = useState(true)
+  const [exercisesError, setExercisesError] = useState<string | null>(null)
+
+  const [session, setSession] = useState<Session | null>(null)
+  const [pendingResume, setPendingResume] = useState<Session | null>(null)
+  const [view, setView] = useState<View>('logging')
+
+  // -- Initialise session (check for resume) --------------------------------
+  /* eslint-disable react-hooks/set-state-in-effect -- one-time init from localStorage on mount */
+  useEffect(() => {
+    const saved = loadSession()
+    if (saved && saved.entries.length > 0) {
+      setPendingResume(saved)
+    } else {
+      setSession(createSession())
+    }
+  }, [])
+  /* eslint-enable react-hooks/set-state-in-effect */
+
+  // -- Persist session on every change --------------------------------------
+  useEffect(() => {
+    if (session) {
+      saveSession(session)
+    }
+  }, [session])
+
+  // -- Load exercises from API ----------------------------------------------
+  const loadExercises = useCallback(async () => {
+    if (!idToken) return
+
+    setExercisesLoading(true)
+    setExercisesError(null)
+
+    try {
+      const result = await fetchExercises(idToken)
+      setExercises(result)
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : 'Failed to load exercises'
+      setExercisesError(message)
+    } finally {
+      setExercisesLoading(false)
+    }
+  }, [idToken])
+
+  /* eslint-disable react-hooks/set-state-in-effect -- async data fetch on mount */
+  useEffect(() => {
+    void loadExercises()
+  }, [loadExercises])
+  /* eslint-enable react-hooks/set-state-in-effect */
+
+  // -- Session actions ------------------------------------------------------
+
+  const handleResume = useCallback(() => {
+    if (pendingResume) {
+      setSession(pendingResume)
+      setPendingResume(null)
+    }
+  }, [pendingResume])
+
+  const handleDiscard = useCallback(() => {
+    clearSession()
+    setPendingResume(null)
+    setSession(createSession())
+  }, [])
+
+  const handleAddEntry = useCallback(
+    (entry: ExerciseEntry) => {
+      if (!session) return
+      setSession((prev) => (prev ? addEntry(prev, entry) : prev))
+    },
+    [session],
+  )
+
+  const handleUpdateEntry = useCallback(
+    (exercise: string, kg: number) => {
+      if (!session) return
+      setSession((prev) => (prev ? updateEntry(prev, exercise, kg) : prev))
+    },
+    [session],
+  )
+
+  const handleRemoveEntry = useCallback(
+    (exercise: string) => {
+      if (!session) return
+      setSession((prev) => (prev ? removeEntry(prev, exercise) : prev))
+    },
+    [session],
+  )
+
+  const handleFinish = useCallback(() => {
+    setView('summary')
+  }, [])
+
+  const handleBackToLogging = useCallback(() => {
+    setView('logging')
+  }, [])
+
+  const handleSave = useCallback(() => {
+    if (!session) return
+    // Stub: log session to console for now (will integrate API in issue #7)
+    console.log('[SessionScreen] Saving session:', session)
+    clearSession()
+    setSession(createSession())
+    setView('logging')
+    toast.success('Session saved!')
+  }, [session])
+
+  if (!user) return null
+
+  // -- Render ---------------------------------------------------------------
 
   return (
     <div className="flex min-h-svh flex-col">
       {/* Header */}
       <header className="sticky top-0 z-10 border-b bg-background/80 backdrop-blur-sm">
         <div className="mx-auto flex w-full max-w-lg items-center justify-between px-4 py-3">
-          <h1 className="text-lg font-semibold tracking-tight">
-            Gym Tracker
-          </h1>
+          <h1 className="text-lg font-semibold tracking-tight">Gym Tracker</h1>
           <div className="flex items-center gap-3">
             <Avatar className="h-8 w-8">
               <AvatarFallback className="text-xs">
@@ -89,68 +316,137 @@ export function SessionScreen() {
       {/* Main content */}
       <main className="flex flex-1 flex-col items-center px-4 py-6">
         <div className="flex w-full max-w-lg flex-col gap-6">
-          {/* Exercise Logger */}
-          <Card className="w-full">
-            <CardHeader>
-              <CardTitle>Log Exercise</CardTitle>
-              <CardDescription>Add an exercise to your session</CardDescription>
-            </CardHeader>
-            <CardContent>
-              {exercisesLoading && (
-                <p className="text-center text-sm text-muted-foreground">
-                  Loading exercises...
-                </p>
+          {/* Resume prompt */}
+          {pendingResume && (
+            <ResumeDialog onResume={handleResume} onDiscard={handleDiscard} />
+          )}
+
+          {/* Session active */}
+          {session && view === 'logging' && (
+            <>
+              {/* Exercise Logger */}
+              <Card className="w-full">
+                <CardHeader>
+                  <CardTitle>Log Exercise</CardTitle>
+                  <CardDescription>
+                    Add an exercise to your session
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {exercisesLoading && (
+                    <p className="text-center text-sm text-muted-foreground">
+                      Loading exercises...
+                    </p>
+                  )}
+
+                  {exercisesError && (
+                    <div className="flex flex-col items-center gap-3">
+                      <p className="text-center text-sm text-destructive">
+                        {exercisesError}
+                      </p>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={loadExercises}
+                      >
+                        Retry
+                      </Button>
+                    </div>
+                  )}
+
+                  {!exercisesLoading && !exercisesError && (
+                    <ExerciseLogger
+                      userExercises={exercises}
+                      onAdd={handleAddEntry}
+                    />
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Session entries list */}
+              {session.entries.length > 0 && (
+                <Card className="w-full">
+                  <CardHeader>
+                    <CardTitle>
+                      Session ({session.entries.length}{' '}
+                      {session.entries.length === 1 ? 'entry' : 'entries'})
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <ul className="space-y-2">
+                      {session.entries.map((entry) => (
+                        <SessionEntryRow
+                          key={entry.exercise}
+                          entry={entry}
+                          onUpdate={handleUpdateEntry}
+                          onRemove={handleRemoveEntry}
+                        />
+                      ))}
+                    </ul>
+                  </CardContent>
+                </Card>
               )}
 
-              {exercisesError && (
-                <div className="flex flex-col items-center gap-3">
-                  <p className="text-center text-sm text-destructive">
-                    {exercisesError}
-                  </p>
-                  <Button variant="outline" size="sm" onClick={loadExercises}>
-                    Retry
-                  </Button>
-                </div>
+              {/* Finish session button */}
+              {session.entries.length > 0 && (
+                <Button className="w-full" size="lg" onClick={handleFinish}>
+                  Finish Session
+                </Button>
               )}
+            </>
+          )}
 
-              {!exercisesLoading && !exercisesError && (
-                <ExerciseLogger
-                  userExercises={exercises}
-                  onAdd={handleAddEntry}
-                />
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Session entries list */}
-          {sessionEntries.length > 0 && (
+          {/* Summary view */}
+          {session && view === 'summary' && (
             <Card className="w-full">
               <CardHeader>
-                <CardTitle>
-                  Session ({sessionEntries.length}{" "}
-                  {sessionEntries.length === 1 ? "entry" : "entries"})
-                </CardTitle>
+                <CardTitle>Session Summary</CardTitle>
+                <CardDescription>
+                  Review your session before saving
+                </CardDescription>
               </CardHeader>
-              <CardContent>
-                <ul className="space-y-2">
-                  {sessionEntries.map((entry, i) => (
-                    <li
-                      key={`${entry.exercise}-${i}`}
-                      className="flex items-baseline justify-between rounded-md bg-muted px-3 py-2 text-sm"
-                    >
-                      <span className="font-medium">{entry.exercise}</span>
-                      <span className="text-muted-foreground">
-                        {entry.kg} kg
-                        {entry.notes ? ` — ${entry.notes}` : ""}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
+              <CardContent className="flex flex-col gap-4">
+                {session.entries.length === 0 ? (
+                  <p className="text-center text-sm text-muted-foreground">
+                    No exercises logged.
+                  </p>
+                ) : (
+                  <ul className="space-y-2">
+                    {session.entries.map((entry) => (
+                      <li
+                        key={entry.exercise}
+                        className="flex min-h-[44px] items-center justify-between rounded-md bg-muted px-3 py-2 text-sm"
+                      >
+                        <span className="font-medium">{entry.exercise}</span>
+                        <span className="text-muted-foreground">
+                          {entry.kg} kg
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+
+                <div className="flex gap-3">
+                  <Button
+                    className="flex-1"
+                    variant="outline"
+                    onClick={handleBackToLogging}
+                  >
+                    Back
+                  </Button>
+                  <Button
+                    className="flex-1"
+                    onClick={handleSave}
+                    disabled={session.entries.length === 0}
+                  >
+                    Save
+                  </Button>
+                </div>
               </CardContent>
             </Card>
           )}
         </div>
       </main>
     </div>
-  );
+  )
 }

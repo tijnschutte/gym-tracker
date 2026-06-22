@@ -1,11 +1,17 @@
-import { useAuth } from "@/hooks/useAuth";
-import { LoginScreen } from "@/components/LoginScreen";
-import { SessionScreen } from "@/components/SessionScreen";
+import { useAuth } from '@/hooks/useAuth'
+import { LoginScreen } from '@/components/LoginScreen'
+import { SessionScreen } from '@/components/SessionScreen'
+import { Toaster } from '@/components/ui/sonner'
 
 function App() {
-  const { user } = useAuth();
+  const { user } = useAuth()
 
-  return user ? <SessionScreen /> : <LoginScreen />;
+  return (
+    <>
+      {user ? <SessionScreen /> : <LoginScreen />}
+      <Toaster />
+    </>
+  )
 }
 
-export default App;
+export default App

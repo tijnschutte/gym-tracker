@@ -34,39 +34,41 @@
  */
 function doPost(e) {
   try {
-    var body = JSON.parse(e.postData.contents);
-    var idToken = body.idToken;
+    var body = JSON.parse(e.postData.contents)
+    var idToken = body.idToken
 
     if (!idToken) {
-      return _jsonResponse({ error: "Missing idToken" }, 400);
+      return _jsonResponse({ error: 'Missing idToken' }, 400)
     }
 
     // ---- Verify the Google ID token ----------------------------------------
-    var tokenPayload = _verifyIdToken(idToken);
+    var tokenPayload = _verifyIdToken(idToken)
     if (tokenPayload.error) {
-      return _jsonResponse({ error: "Invalid token: " + tokenPayload.error }, 401);
+      return _jsonResponse(
+        { error: 'Invalid token: ' + tokenPayload.error },
+        401,
+      )
     }
 
-    var userSub   = tokenPayload.sub;
-    var userEmail = tokenPayload.email;
-    var userName  = tokenPayload.name || tokenPayload.email;
+    var userSub = tokenPayload.sub
+    var userEmail = tokenPayload.email
+    var userName = tokenPayload.name || tokenPayload.email
 
     // ---- Route by action ---------------------------------------------------
-    var action = body.action;
+    var action = body.action
 
-    if (action === "getExercises") {
-      return _handleGetExercises(userSub);
+    if (action === 'getExercises') {
+      return _handleGetExercises(userSub)
     }
 
-    if (action === "save") {
+    if (action === 'save') {
       // Placeholder — will be implemented in issue #7
-      return _jsonResponse({ success: true });
+      return _jsonResponse({ success: true })
     }
 
-    return _jsonResponse({ error: "Unknown action: " + action }, 400);
-
+    return _jsonResponse({ error: 'Unknown action: ' + action }, 400)
   } catch (err) {
-    return _jsonResponse({ error: "Server error: " + err.message }, 500);
+    return _jsonResponse({ error: 'Server error: ' + err.message }, 500)
   }
 }
 
@@ -81,29 +83,29 @@ function doPost(e) {
  * @returns {GoogleAppsScript.Content.TextOutput} JSON with { exercises: string[] }
  */
 function _handleGetExercises(userSub) {
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
-  var pivotSheet = ss.getSheetByName("pivot");
+  var ss = SpreadsheetApp.getActiveSpreadsheet()
+  var pivotSheet = ss.getSheetByName('pivot')
 
   if (!pivotSheet) {
-    return _jsonResponse({ exercises: [] });
+    return _jsonResponse({ exercises: [] })
   }
 
-  var data = pivotSheet.getDataRange().getValues();
-  var exercises = [];
-  var seen = {};
+  var data = pivotSheet.getDataRange().getValues()
+  var exercises = []
+  var seen = {}
 
   // Row 0 is the header row; data rows start at index 1
   for (var i = 1; i < data.length; i++) {
-    var rowSub      = String(data[i][0]); // Column A = user_sub
-    var rowExercise = String(data[i][1]); // Column B = exercise
+    var rowSub = String(data[i][0]) // Column A = user_sub
+    var rowExercise = String(data[i][1]) // Column B = exercise
 
     if (rowSub === userSub && rowExercise && !seen[rowExercise]) {
-      seen[rowExercise] = true;
-      exercises.push(rowExercise);
+      seen[rowExercise] = true
+      exercises.push(rowExercise)
     }
   }
 
-  return _jsonResponse({ exercises: exercises });
+  return _jsonResponse({ exercises: exercises })
 }
 
 // =============================================================================
@@ -117,16 +119,18 @@ function _handleGetExercises(userSub) {
  * @returns {object} The decoded token payload, or { error: string } on failure.
  */
 function _verifyIdToken(token) {
-  var url = "https://oauth2.googleapis.com/tokeninfo?id_token=" + encodeURIComponent(token);
+  var url =
+    'https://oauth2.googleapis.com/tokeninfo?id_token=' +
+    encodeURIComponent(token)
 
-  var response = UrlFetchApp.fetch(url, { muteHttpExceptions: true });
-  var code = response.getResponseCode();
+  var response = UrlFetchApp.fetch(url, { muteHttpExceptions: true })
+  var code = response.getResponseCode()
 
   if (code !== 200) {
-    return { error: "tokeninfo returned HTTP " + code };
+    return { error: 'tokeninfo returned HTTP ' + code }
   }
 
-  return JSON.parse(response.getContentText());
+  return JSON.parse(response.getContentText())
 }
 
 /**
@@ -139,7 +143,7 @@ function _verifyIdToken(token) {
 function _jsonResponse(payload, statusCode) {
   // Note: Apps Script Web Apps always return HTTP 200 regardless of the
   // statusCode we might want.  We embed status info in the JSON body instead.
-  return ContentService
-    .createTextOutput(JSON.stringify(payload))
-    .setMimeType(ContentService.MimeType.JSON);
+  return ContentService.createTextOutput(JSON.stringify(payload)).setMimeType(
+    ContentService.MimeType.JSON,
+  )
 }

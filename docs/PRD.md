@@ -34,16 +34,19 @@ A mobile-first web app hosted on GitHub Pages. Users sign in with their Google a
 ## Implementation Decisions
 
 ### Architecture
+
 - **Frontend:** Vite + React + TypeScript + shadcn/ui, deployed to GitHub Pages (`tijnschutte.github.io/gym-tracker`) via GitHub Actions.
 - **Backend:** Google Apps Script Web App — single `doPost` endpoint with action-based routing.
 - **Storage:** Single shared Google Sheet with two tabs (`pivot`, `log`). Data isolated per user by filtering on `user_sub`.
 - **Auth:** Google Identity Services (GIS) library. Frontend obtains a JWT ID token on sign-in. Token sent with every request to Apps Script, which verifies it server-side and extracts the user's `sub` (stable Google user ID), `email`, and `name`.
 
 ### Data Model
+
 - **`pivot` tab:** `user_sub | exercise | <date columns as DD/MM/YYYY>`. One kg value per cell. New rows created for new (user, exercise) pairs. New columns created for new dates.
 - **`log` tab:** `date | session_id | user_sub | user_email | user_name | exercise | kg | notes | created_at`. One row per exercise per session. Append-only.
 
 ### Modules
+
 1. **Auth Module** — Google Sign-In integration, token state management, sign-in/sign-out flow.
 2. **Session Module** — Core domain logic: create session, add/edit/remove exercise entries, session lifecycle (active, reviewing, saved). Pure state, no UI or API dependencies.
 3. **Exercise Registry** — Hardcoded starter list merged with user's history fetched from the backend. Dedup, Title Case normalization, search/filter. Pure logic.
@@ -53,10 +56,12 @@ A mobile-first web app hosted on GitHub Pages. Users sign in with their Google a
 7. **Apps Script Backend** — `doPost` handler: verify ID token, route by `action` field, read/write pivot and log tabs.
 
 ### Apps Script Actions
+
 - `getExercises`: Returns the list of exercises the authenticated user has previously logged (from pivot tab column B, filtered by user_sub).
 - `save`: Receives session data. For each exercise entry: upsert pivot cell at (user_sub + exercise row, date column), append row to log tab.
 
 ### Key Behaviors
+
 - **Session ID:** Generated client-side (UUID v4) at session start.
 - **Duplicate exercise handling:** Last value wins — overwrite within the session.
 - **Exercise normalization:** Trim whitespace, convert to Title Case before storage and search.
@@ -65,6 +70,7 @@ A mobile-first web app hosted on GitHub Pages. Users sign in with their Google a
 - **Error handling:** On save failure, show error toast. Session remains active for retry. localStorage still has the backup.
 
 ### User Identity
+
 - Primary key: Google `sub` claim (stable, never changes).
 - `email` and `name` stored alongside for display and developer convenience.
 - Schema is social-feature-ready: shared sheet with user_sub allows future group/leaderboard queries without migration.
@@ -74,11 +80,13 @@ A mobile-first web app hosted on GitHub Pages. Users sign in with their Google a
 Good tests verify external behavior through public interfaces, not implementation details. Tests should be resilient to refactoring — if the internal structure changes but the behavior stays the same, tests should still pass.
 
 ### Tested Modules
+
 1. **Session Module** — Test session lifecycle: adding exercises, editing kg, removing entries, duplicate overwrite behavior, session state transitions. Pure state logic with clear inputs/outputs.
 2. **Exercise Registry** — Test dedup logic, Title Case normalization, merge of starter list with user history, search/filter behavior. Pure functions.
 3. **Persistence Module** — Test write-on-change, read-on-init, resume detection, clear-on-save. Uses a mock localStorage interface.
 
 ### Not Tested (for now)
+
 - UI components (manual testing sufficient at this scale)
 - API Client (integration with Apps Script is better verified end-to-end)
 - Apps Script backend (tested manually via the Google Sheet)

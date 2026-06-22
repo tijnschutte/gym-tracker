@@ -5,15 +5,15 @@
 1. Go to [sheets.google.com](https://sheets.google.com) and create a new spreadsheet.
 2. Rename the first tab to **`pivot`** and add these headers in row 1:
 
-   | A | B | C … |
-   |---|---|-----|
+   | A        | B        | C …                                  |
+   | -------- | -------- | ------------------------------------ |
    | user_sub | exercise | _(date columns added automatically)_ |
 
 3. Create a second tab named **`log`** with these headers in row 1:
 
-   | A | B | C | D | E | F | G | H | I |
-   |---|---|---|---|---|---|---|---|---|
-   | date | session_id | user_sub | user_email | user_name | exercise | kg | notes | created_at |
+   | A    | B          | C        | D          | E         | F        | G   | H     | I          |
+   | ---- | ---------- | -------- | ---------- | --------- | -------- | --- | ----- | ---------- |
+   | date | session_id | user_sub | user_email | user_name | exercise | kg  | notes | created_at |
 
 ## 2. Add the Apps Script
 
@@ -26,8 +26,8 @@
 
 1. Click **Deploy > New deployment**.
 2. Select type: **Web app**.
-3. Set **Execute as**: *Me*.
-4. Set **Who has access**: *Anyone*.
+3. Set **Execute as**: _Me_.
+4. Set **Who has access**: _Anyone_.
 5. Click **Deploy** and authorize when prompted.
 6. Copy the **Web App URL** — it looks like:
    ```
