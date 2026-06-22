@@ -65,6 +65,10 @@ function doPost(e) {
       return _handleSave(userSub, userEmail, userName, body.data)
     }
 
+    if (action === 'getHistory') {
+      return _handleGetHistory(userSub)
+    }
+
     return _jsonResponse({ error: 'Unknown action: ' + action }, 400)
   } catch (err) {
     return _jsonResponse({ error: 'Server error: ' + err.message }, 500)
@@ -206,6 +210,63 @@ function _handleSave(userSub, userEmail, userName, data) {
   }
 
   return _jsonResponse({ success: true })
+}
+
+/**
+ * Returns the full exercise history for a user, keyed by exercise name.
+ *
+ * Response shape:
+ *   { history: { "Bench Press": { "01/01/2026": 60, ... }, ... } }
+ *
+ * @param {string} userSub - The Google `sub` claim identifying the user.
+ * @returns {GoogleAppsScript.Content.TextOutput} JSON with { history: object }
+ */
+function _handleGetHistory(userSub) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet()
+  var pivotSheet = ss.getSheetByName('pivot')
+
+  if (!pivotSheet) {
+    return _jsonResponse({ history: {} })
+  }
+
+  var tz = ss.getSpreadsheetTimeZone()
+  var data = pivotSheet.getDataRange().getValues()
+  var headers = data[0]
+
+  // Pre-format date column headers (columns C onward)
+  var dateHeaders = []
+  for (var c = 2; c < headers.length; c++) {
+    var headerVal = headers[c]
+    if (headerVal instanceof Date) {
+      dateHeaders.push(Utilities.formatDate(headerVal, tz, 'dd/MM/yyyy'))
+    } else {
+      dateHeaders.push(String(headerVal))
+    }
+  }
+
+  var history = {}
+
+  for (var i = 1; i < data.length; i++) {
+    var rowSub = String(data[i][0])
+    if (rowSub !== userSub) {
+      continue
+    }
+
+    var exercise = String(data[i][1])
+    var entries = {}
+
+    for (var c = 2; c < headers.length; c++) {
+      var cellValue = data[i][c]
+      if (cellValue === '' || cellValue == null) {
+        continue
+      }
+      entries[dateHeaders[c - 2]] = cellValue
+    }
+
+    history[exercise] = entries
+  }
+
+  return _jsonResponse({ history: history })
 }
 
 // =============================================================================
