@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useAuth } from '@/hooks/useAuth'
-import { fetchExercises } from '@/lib/api'
+import { fetchExercises, saveSession as apiSaveSession } from '@/lib/api'
 import {
   createSession,
   addEntry,
@@ -21,7 +21,7 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Input } from '@/components/ui/input'
 import { ExerciseLogger } from '@/components/ExerciseLogger'
 import type { ExerciseEntry } from '@/components/ExerciseLogger'
-import { X, Pencil, Check } from 'lucide-react'
+import { X, Pencil, Check, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 
 // ---------------------------------------------------------------------------
@@ -190,6 +190,7 @@ export function SessionScreen() {
   const [session, setSession] = useState<Session | null>(null)
   const [pendingResume, setPendingResume] = useState<Session | null>(null)
   const [view, setView] = useState<View>('logging')
+  const [saving, setSaving] = useState(false)
 
   // -- Initialise session (check for resume) --------------------------------
   const [initialized, setInitialized] = useState(false)
@@ -287,15 +288,26 @@ export function SessionScreen() {
     setView('logging')
   }, [])
 
-  const handleSave = useCallback(() => {
-    if (!session) return
-    // Stub: log session to console for now (will integrate API in issue #7)
-    console.log('[SessionScreen] Saving session:', session)
-    clearSession()
-    setSession(createSession())
-    setView('logging')
-    toast.success('Session saved!')
-  }, [session])
+  const handleSave = useCallback(async () => {
+    if (!session || !idToken) return
+    setSaving(true)
+    try {
+      await apiSaveSession(idToken, {
+        sessionId: session.id,
+        exercises: session.entries.map((e) => ({ name: e.exercise, kg: e.kg })),
+      })
+      clearSession()
+      setSession(createSession())
+      setView('logging')
+      toast.success('Session saved!')
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : 'Failed to save session'
+      toast.error(message)
+    } finally {
+      setSaving(false)
+    }
+  }, [session, idToken])
 
   if (!user) return null
 
@@ -438,15 +450,19 @@ export function SessionScreen() {
                     className="flex-1"
                     variant="outline"
                     onClick={handleBackToLogging}
+                    disabled={saving}
                   >
                     Back
                   </Button>
                   <Button
                     className="flex-1"
                     onClick={handleSave}
-                    disabled={session.entries.length === 0}
+                    disabled={session.entries.length === 0 || saving}
                   >
-                    Save
+                    {saving && (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    )}
+                    {saving ? 'Saving...' : 'Save'}
                   </Button>
                 </div>
               </CardContent>

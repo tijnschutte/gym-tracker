@@ -83,7 +83,6 @@ export async function fetchExercises(idToken: string): Promise<string[]> {
 
 /**
  * Save a workout session to the backend.
- * (Stub — the Apps Script handler will be implemented in issue #7.)
  *
  * @param idToken - Google ID token JWT from the auth context.
  * @param data    - The session payload to persist.
