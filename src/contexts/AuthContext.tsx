@@ -1,7 +1,6 @@
 import {
   useCallback,
   useEffect,
-  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -74,8 +73,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       ? "Missing VITE_GOOGLE_CLIENT_ID. Add it to your .env.local file."
       : null,
   );
-  const initializedRef = useRef(false);
-
   // Callback that GIS invokes after a successful sign-in.
   const handleCredentialResponse = useCallback(
     (response: google.accounts.id.CredentialResponse) => {
@@ -97,19 +94,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // Load GIS + initialize on mount.
   useEffect(() => {
-    if (initializedRef.current) return;
-    initializedRef.current = true;
-
-    if (!GOOGLE_CLIENT_ID) {
-      // Initial state already handles this -- nothing to do.
-      return;
-    }
-
-    let cancelled = false;
+    if (!GOOGLE_CLIENT_ID) return;
 
     loadGisScript()
       .then(() => {
-        if (cancelled) return;
         google.accounts.id.initialize({
           client_id: GOOGLE_CLIENT_ID,
           callback: handleCredentialResponse,
@@ -119,16 +107,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setLoading(false);
       })
       .catch(() => {
-        if (cancelled) return;
         setError(
           "Could not load Google Identity Services. Check your network or content-security policy.",
         );
         setLoading(false);
       });
-
-    return () => {
-      cancelled = true;
-    };
   }, [handleCredentialResponse]);
 
   // --- Sign-in: render the One Tap prompt -----------------------------------

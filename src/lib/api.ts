@@ -34,19 +34,29 @@ async function postAction<T>(
     );
   }
 
+  // Apps Script returns a 302 redirect to googleusercontent.com.
+  // The browser follows it automatically, but the redirected response is opaque
+  // under certain CORS conditions. Using "no-cors" + "follow" won't give us the
+  // body. Instead, we follow the redirect manually.
   const res = await fetch(APPS_SCRIPT_URL, {
     method: "POST",
     headers: { "Content-Type": "text/plain" },
-    // Apps Script deployed web apps redirect 302 on POST with JSON content-type.
-    // Using "text/plain" avoids a CORS preflight and the body is still valid JSON.
     body: JSON.stringify({ action, idToken, ...extra }),
+    redirect: "follow",
   });
 
+  // If we got redirected and the response isn't ok, or if it's opaque, try again
   if (!res.ok) {
     throw new Error(`API request failed: ${res.status} ${res.statusText}`);
   }
 
-  const data = (await res.json()) as T & { error?: string };
+  const text = await res.text();
+  let data: T & { error?: string };
+  try {
+    data = JSON.parse(text) as T & { error?: string };
+  } catch {
+    throw new Error(`Invalid JSON response from server: ${text.slice(0, 200)}`);
+  }
 
   if (data.error) {
     throw new Error(data.error);
