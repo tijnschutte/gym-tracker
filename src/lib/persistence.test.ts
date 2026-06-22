@@ -23,8 +23,7 @@ const localStorageMock = {
   get length() {
     return Object.keys(store).length
   },
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  key: vi.fn((_index: number) => null),
+  key: vi.fn(() => null as string | null),
 }
 
 beforeEach(() => {

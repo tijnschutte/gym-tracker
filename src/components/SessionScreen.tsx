@@ -181,25 +181,27 @@ function SessionEntryRow({
 
 export function SessionScreen() {
   const { user, idToken, signOut } = useAuth()
-  const [exercises, setExercises] = useState<string[]>([])
-  const [exercisesLoading, setExercisesLoading] = useState(true)
-  const [exercisesError, setExercisesError] = useState<string | null>(null)
+  const [exercisesResult, setExercisesResult] = useState<
+    | { status: 'loading' }
+    | { status: 'success'; data: string[] }
+    | { status: 'error'; message: string }
+  >({ status: 'loading' })
 
   const [session, setSession] = useState<Session | null>(null)
   const [pendingResume, setPendingResume] = useState<Session | null>(null)
   const [view, setView] = useState<View>('logging')
 
   // -- Initialise session (check for resume) --------------------------------
-  /* eslint-disable react-hooks/set-state-in-effect -- one-time init from localStorage on mount */
-  useEffect(() => {
+  const [initialized, setInitialized] = useState(false)
+  if (!initialized) {
+    setInitialized(true)
     const saved = loadSession()
     if (saved && saved.entries.length > 0) {
       setPendingResume(saved)
     } else {
       setSession(createSession())
     }
-  }, [])
-  /* eslint-enable react-hooks/set-state-in-effect */
+  }
 
   // -- Persist session on every change --------------------------------------
   useEffect(() => {
@@ -209,29 +211,34 @@ export function SessionScreen() {
   }, [session])
 
   // -- Load exercises from API ----------------------------------------------
-  const loadExercises = useCallback(async () => {
+  const [exercisesFetchKey, setExercisesFetchKey] = useState(0)
+
+  useEffect(() => {
     if (!idToken) return
 
-    setExercisesLoading(true)
-    setExercisesError(null)
+    let cancelled = false
 
-    try {
-      const result = await fetchExercises(idToken)
-      setExercises(result)
-    } catch (err) {
-      const message =
-        err instanceof Error ? err.message : 'Failed to load exercises'
-      setExercisesError(message)
-    } finally {
-      setExercisesLoading(false)
+    fetchExercises(idToken)
+      .then((result) => {
+        if (!cancelled) setExercisesResult({ status: 'success', data: result })
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          const message =
+            err instanceof Error ? err.message : 'Failed to load exercises'
+          setExercisesResult({ status: 'error', message })
+        }
+      })
+
+    return () => {
+      cancelled = true
     }
-  }, [idToken])
+  }, [idToken, exercisesFetchKey])
 
-  /* eslint-disable react-hooks/set-state-in-effect -- async data fetch on mount */
-  useEffect(() => {
-    void loadExercises()
-  }, [loadExercises])
-  /* eslint-enable react-hooks/set-state-in-effect */
+  const retryLoadExercises = useCallback(() => {
+    setExercisesResult({ status: 'loading' })
+    setExercisesFetchKey((k) => k + 1)
+  }, [])
 
   // -- Session actions ------------------------------------------------------
 
@@ -333,30 +340,30 @@ export function SessionScreen() {
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
-                  {exercisesLoading && (
+                  {exercisesResult.status === 'loading' && (
                     <p className="text-center text-sm text-muted-foreground">
                       Loading exercises...
                     </p>
                   )}
 
-                  {exercisesError && (
+                  {exercisesResult.status === 'error' && (
                     <div className="flex flex-col items-center gap-3">
                       <p className="text-center text-sm text-destructive">
-                        {exercisesError}
+                        {exercisesResult.message}
                       </p>
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={loadExercises}
+                        onClick={retryLoadExercises}
                       >
                         Retry
                       </Button>
                     </div>
                   )}
 
-                  {!exercisesLoading && !exercisesError && (
+                  {exercisesResult.status === 'success' && (
                     <ExerciseLogger
-                      userExercises={exercises}
+                      userExercises={exercisesResult.data}
                       onAdd={handleAddEntry}
                     />
                   )}
