@@ -252,7 +252,10 @@ function _handleGetHistory(userSub) {
       continue
     }
 
-    var exercise = String(data[i][1])
+    var exercise = String(data[i][1]).trim()
+    if (!exercise) {
+      continue
+    }
     var entries = {}
 
     for (var c = 2; c < headers.length; c++) {

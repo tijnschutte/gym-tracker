@@ -1,10 +1,14 @@
-import { useState } from 'react'
+import { lazy, Suspense, useState } from 'react'
 import { useAuth } from '@/hooks/useAuth'
 import { LoginScreen } from '@/components/LoginScreen'
 import { SessionScreen } from '@/components/SessionScreen'
-import { ProgressScreen } from '@/components/ProgressScreen'
+const ProgressScreen = lazy(() =>
+  import('@/components/ProgressScreen').then((m) => ({
+    default: m.ProgressScreen,
+  })),
+)
 import { Toaster } from '@/components/ui/sonner'
-import { Dumbbell, TrendingUp } from 'lucide-react'
+import { Dumbbell, Loader2, TrendingUp } from 'lucide-react'
 
 type View = 'session' | 'progress'
 
@@ -24,7 +28,19 @@ function App() {
   return (
     <>
       <div className="flex min-h-svh flex-col pb-16">
-        {view === 'progress' ? <ProgressScreen /> : <SessionScreen />}
+        {view === 'progress' ? (
+          <Suspense
+            fallback={
+              <div className="flex flex-1 items-center justify-center">
+                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+              </div>
+            }
+          >
+            <ProgressScreen />
+          </Suspense>
+        ) : (
+          <SessionScreen />
+        )}
       </div>
 
       {/* Bottom navigation */}
