@@ -30,6 +30,10 @@ A mobile-first web app hosted on GitHub Pages. Users sign in with their Google a
 20. As a gym-goer, I want the exercise dropdown to include exercises I've previously logged, so that my personal exercise vocabulary grows over time.
 21. As a gym-goer, I want the app to work well on my phone, so that I can use it comfortably at the gym.
 22. As a gym-goer, I want to sign out, so that I can switch accounts or protect my session on a shared device.
+23. As a gym-goer, I want to see a list of all exercises I've ever logged, so that I can pick one to view my progress.
+24. As a gym-goer, I want to see a line chart of my weight over time for a specific exercise, so that I can see whether I'm getting stronger.
+25. As a gym-goer, I want to tap a data point on the chart to see the exact date and kg value, so that I can check specifics.
+26. As a gym-goer, I want to see a clear message when I have fewer than 2 data points for an exercise, so that I understand why there's no chart.
 
 ## Implementation Decisions
 
@@ -52,13 +56,14 @@ A mobile-first web app hosted on GitHub Pages. Users sign in with their Google a
 3. **Exercise Registry** — Hardcoded starter list merged with user's history fetched from the backend. Dedup, Title Case normalization, search/filter. Pure logic.
 4. **API Client** — Talks to the Apps Script endpoint. Attaches ID token, sends action-based payloads (`save`, `getExercises`), handles errors.
 5. **Persistence Module** — localStorage wrapper for session backup. Writes on every state change, reads on app init for resume detection.
-6. **UI Layer** — React + shadcn components: Login, Exercise Logger (combobox + kg input + notes), Session In Progress (exercise list with inline edit), Summary/Review, toast notifications.
+6. **UI Layer** — React + shadcn components: Login, Exercise Logger (combobox + kg input + notes), Session In Progress (exercise list with inline edit), Summary/Review, Progress (exercise list + line charts), toast notifications.
 7. **Apps Script Backend** — `doPost` handler: verify ID token, route by `action` field, read/write pivot and log tabs.
 
 ### Apps Script Actions
 
 - `getExercises`: Returns the list of exercises the authenticated user has previously logged (from pivot tab column B, filtered by user_sub).
 - `save`: Receives session data. For each exercise entry: upsert pivot cell at (user_sub + exercise row, date column), append row to log tab.
+- `getHistory`: Returns the authenticated user's full weight history from the pivot tab. Response shape: exercise-keyed object `{ "Bench Press": { "01/01/2026": 60, "08/01/2026": 65 }, ... }`. Single call, cached on the frontend.
 
 ### Key Behaviors
 
@@ -94,7 +99,7 @@ Good tests verify external behavior through public interfaces, not implementatio
 ## Out of Scope
 
 - Social features (groups, leaderboards, friend comparisons) — deferred, schema supports future addition
-- Progress charts or historical data views
+- ~~Progress charts or historical data views~~ (now in scope — see user stories 23-26)
 - Rep/set tracking — only kg is logged
 - Offline-first / service worker / PWA
 - Exercise categorization (muscle groups, push/pull, etc.)

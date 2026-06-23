@@ -17,6 +17,8 @@ export interface SaveSessionData {
   }[]
 }
 
+export type HistoryData = Record<string, Record<string, number>>
+
 // ---- Helpers ----------------------------------------------------------------
 
 /**
@@ -92,4 +94,15 @@ export async function saveSession(
   data: SaveSessionData,
 ): Promise<void> {
   await postAction<{ success: boolean }>('save', idToken, { data })
+}
+
+/**
+ * Fetch the full exercise history for the current user.
+ *
+ * @param idToken - Google ID token JWT from the auth context.
+ * @returns A nested record: exercise name → date string → kg value.
+ */
+export async function fetchHistory(idToken: string): Promise<HistoryData> {
+  const data = await postAction<{ history: HistoryData }>('getHistory', idToken)
+  return data.history
 }
