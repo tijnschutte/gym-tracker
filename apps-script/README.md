@@ -2,18 +2,31 @@
 
 ## 1. Create the Google Sheet
 
+The **`log`** tab is the single source of truth — every read (exercises, history)
+is derived from it, so the data can never drift. The **`pivot`** tab is an
+optional, self-updating cosmetic view.
+
 1. Go to [sheets.google.com](https://sheets.google.com) and create a new spreadsheet.
-2. Rename the first tab to **`pivot`** and add these headers in row 1:
-
-   | A        | B        | C …                                  |
-   | -------- | -------- | ------------------------------------ |
-   | user_sub | exercise | _(date columns added automatically)_ |
-
-3. Create a second tab named **`log`** with these headers in row 1:
+2. Rename the first tab to **`log`** and add these headers in row 1:
 
    | A    | B          | C        | D          | E         | F        | G   | H     | I          |
    | ---- | ---------- | -------- | ---------- | --------- | -------- | --- | ----- | ---------- |
    | date | session_id | user_sub | user_email | user_name | exercise | kg  | notes | created_at |
+
+3. _(Optional)_ Create a second tab named **`pivot`** for a human-readable
+   weight-over-time matrix. Leave the tab empty and put this single formula in
+   cell **A1** — it regenerates itself whenever a new session is logged:
+
+   ```
+   =QUERY(log!{C2:C, F2:F, A2:A, G2:G},
+          "select Col1, Col2, max(Col4)
+           where Col1 is not null
+           group by Col1, Col2
+           pivot Col3", 0)
+   ```
+
+   (Col1=user_sub, Col2=exercise, Col3=date, Col4=kg.) The script never reads or
+   writes this tab, so the formula is free to own every cell.
 
 ## 2. Add the Apps Script
 
