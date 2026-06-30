@@ -7,13 +7,14 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
 
 export function LoginScreen() {
-  const { loading, error, signIn } = useAuth()
+  const { loading, error } = useAuth()
   const googleButtonRef = useRef<HTMLDivElement>(null)
 
-  // Render the official Google button once GIS is ready.
+  // Render the official Google button once GIS is ready. This is the reliable
+  // sign-in path on every platform — the One Tap prompt is unavailable on iOS
+  // Safari and many mobile/in-app browsers, so we don't surface it here.
   useEffect(() => {
     if (loading || error) return
     if (!googleButtonRef.current) return
@@ -41,43 +42,16 @@ export function LoginScreen() {
           </CardDescription>
         </CardHeader>
 
-        <CardContent className="flex flex-col items-center gap-4">
+        <CardContent className="flex min-h-[64px] flex-col items-center justify-center gap-4">
           {loading && (
             <p className="text-sm text-muted-foreground">Loading...</p>
           )}
 
           {error && (
-            <div className="flex flex-col items-center gap-3">
-              <p className="text-sm text-destructive text-center">{error}</p>
-              {/* Fallback button in case renderButton can't work */}
-              <Button
-                variant="outline"
-                size="lg"
-                className="w-full max-w-[300px]"
-                onClick={signIn}
-                disabled
-              >
-                Sign in with Google
-              </Button>
-            </div>
+            <p className="text-center text-sm text-destructive">{error}</p>
           )}
 
-          {!loading && !error && (
-            <>
-              {/* Google-rendered button */}
-              <div ref={googleButtonRef} />
-
-              {/* Fallback: manual trigger via One Tap prompt */}
-              <Button
-                variant="ghost"
-                size="sm"
-                className="text-muted-foreground"
-                onClick={signIn}
-              >
-                Use One Tap sign-in instead
-              </Button>
-            </>
-          )}
+          {!loading && !error && <div ref={googleButtonRef} />}
         </CardContent>
       </Card>
     </div>
