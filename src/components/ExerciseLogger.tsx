@@ -22,6 +22,7 @@ import {
   CommandList,
 } from '@/components/ui/command'
 import { cn } from '@/lib/utils'
+import { roundKg } from '@/lib/session'
 
 export interface ExerciseEntry {
   exercise: string
@@ -77,7 +78,7 @@ export function ExerciseLogger({ userExercises, onAdd }: ExerciseLoggerProps) {
 
     onAdd({
       exercise: selectedExercise,
-      kg: kgNum,
+      kg: roundKg(kgNum),
     })
 
     // Reset form

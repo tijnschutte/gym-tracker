@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { AuthContext, type UserInfo } from './auth-context'
+import { clearSession } from '@/lib/persistence'
 
 // ---- Helpers ---------------------------------------------------------------
 
@@ -111,6 +112,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       ? 'Missing VITE_GOOGLE_CLIENT_ID. Add it to your .env.local file.'
       : null,
   )
+  // Resolvers for in-flight refreshToken() calls, fulfilled when GIS delivers
+  // the next credential (or rejected with null on timeout).
+  const pendingRefreshRef = useRef<((token: string | null) => void)[]>([])
+
   // Callback that GIS invokes after a successful sign-in.
   const handleCredentialResponse = useCallback(
     (response: google.accounts.id.CredentialResponse) => {
@@ -128,9 +133,37 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       } catch {
         setError('Failed to decode Google credential')
       }
+
+      // Fulfil any pending refreshToken() callers with the fresh token.
+      const waiters = pendingRefreshRef.current
+      pendingRefreshRef.current = []
+      waiters.forEach((resolve) => resolve(response.credential))
     },
     [],
   )
+
+  // Ask Google for a fresh token. Resolves with the new token, or null if no
+  // token arrives within 3s (prompt dismissed / cooldown / needs interaction).
+  const refreshToken = useCallback((): Promise<string | null> => {
+    if (!window.google?.accounts?.id) return Promise.resolve(null)
+
+    return new Promise((resolve) => {
+      let settled = false
+      const settle = (token: string | null) => {
+        if (settled) return
+        settled = true
+        // Drop our resolver so a late credential doesn't re-trigger it.
+        pendingRefreshRef.current = pendingRefreshRef.current.filter(
+          (r) => r !== settle,
+        )
+        resolve(token)
+      }
+
+      pendingRefreshRef.current.push(settle)
+      google.accounts.id.prompt()
+      setTimeout(() => settle(null), 3000)
+    })
+  }, [])
 
   // Load GIS + initialize on mount.
   useEffect(() => {
@@ -171,11 +204,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null)
     setIdToken(null)
     clearStoredAuth()
+    // Also drop any in-progress session so it can't leak to the next account
+    // that signs in on this device.
+    clearSession()
   }, [user])
 
   return (
     <AuthContext.Provider
-      value={{ user, idToken, loading, error, signIn, signOut }}
+      value={{ user, idToken, loading, error, signIn, signOut, refreshToken }}
     >
       {children}
     </AuthContext.Provider>

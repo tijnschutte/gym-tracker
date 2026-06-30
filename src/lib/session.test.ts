@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { createSession, addEntry, updateEntry, removeEntry } from './session'
+import {
+  createSession,
+  addEntry,
+  updateEntry,
+  removeEntry,
+  roundKg,
+} from './session'
 import type { SessionEntry } from './session'
 
 // ---------------------------------------------------------------------------
@@ -153,5 +159,21 @@ describe('removeEntry', () => {
     const updated = removeEntry(session, 'Squat')
     expect(updated).not.toBe(session)
     expect(session.entries).toHaveLength(1)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// roundKg
+// ---------------------------------------------------------------------------
+describe('roundKg', () => {
+  it('rounds to one decimal place', () => {
+    expect(roundKg(20.25)).toBe(20.3)
+    expect(roundKg(20.24)).toBe(20.2)
+    expect(roundKg(80.05)).toBe(80.1)
+  })
+
+  it('leaves values with one or zero decimals unchanged', () => {
+    expect(roundKg(80)).toBe(80)
+    expect(roundKg(82.5)).toBe(82.5)
   })
 })

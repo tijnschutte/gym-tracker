@@ -7,7 +7,7 @@ import {
   updateEntry,
   removeEntry,
 } from '@/lib/session'
-import type { Session, SessionEntry } from '@/lib/session'
+import { roundKg, type Session, type SessionEntry } from '@/lib/session'
 import { saveSession, loadSession, clearSession } from '@/lib/persistence'
 import { Button } from '@/components/ui/button'
 import {
@@ -103,7 +103,7 @@ function SessionEntryRow({
   const handleConfirm = useCallback(() => {
     const parsed = parseFloat(editValue)
     if (!isNaN(parsed) && parsed >= 0) {
-      onUpdate(entry.exercise, parsed)
+      onUpdate(entry.exercise, roundKg(parsed))
     }
     setEditing(false)
   }, [editValue, entry.exercise, onUpdate])
@@ -180,7 +180,7 @@ function SessionEntryRow({
 // ---------------------------------------------------------------------------
 
 export function SessionScreen() {
-  const { user, idToken, signOut } = useAuth()
+  const { user, idToken, signOut, refreshToken } = useAuth()
   const [exercisesResult, setExercisesResult] = useState<
     | { status: 'loading' }
     | { status: 'success'; data: string[] }
@@ -291,23 +291,56 @@ export function SessionScreen() {
   const handleSave = useCallback(async () => {
     if (!session || !idToken) return
     setSaving(true)
-    try {
-      await apiSaveSession(idToken, {
-        sessionId: session.id,
-        exercises: session.entries.map((e) => ({ name: e.exercise, kg: e.kg })),
-      })
+
+    const payload = {
+      sessionId: session.id,
+      exercises: session.entries.map((e) => ({ name: e.exercise, kg: e.kg })),
+    }
+
+    const finishSuccess = () => {
       clearSession()
       setSession(createSession())
       setView('logging')
       toast.success('Session saved!')
+    }
+
+    // The backend rejects an expired token with an "Invalid token" message.
+    const isAuthError = (e: unknown) =>
+      e instanceof Error && /invalid token/i.test(e.message)
+
+    try {
+      await apiSaveSession(idToken, payload)
+      finishSuccess()
     } catch (err) {
-      const message =
-        err instanceof Error ? err.message : 'Failed to save session'
-      toast.error(message)
+      if (!isAuthError(err)) {
+        toast.error(
+          err instanceof Error ? err.message : 'Failed to save session',
+        )
+        return
+      }
+
+      // Token likely expired mid-session (Google ID tokens last ~1h). Try to get
+      // a fresh one transparently and retry the save once. The session stays in
+      // localStorage throughout, so nothing is lost if this fails.
+      const fresh = await refreshToken()
+      if (!fresh) {
+        toast.error('Session expired — sign in again, then save.')
+        return
+      }
+      try {
+        await apiSaveSession(fresh, payload)
+        finishSuccess()
+      } catch (retryErr) {
+        toast.error(
+          retryErr instanceof Error
+            ? retryErr.message
+            : 'Failed to save session',
+        )
+      }
     } finally {
       setSaving(false)
     }
-  }, [session, idToken])
+  }, [session, idToken, refreshToken])
 
   if (!user) return null
 

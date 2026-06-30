@@ -17,6 +17,12 @@ export interface AuthState {
   error: string | null
   signIn: () => void
   signOut: () => void
+  /**
+   * Request a fresh ID token via the Google One Tap prompt. Resolves with the
+   * new token if Google issues one within the timeout, or null if it can't do
+   * so silently (the prompt was dismissed, in cooldown, or needs interaction).
+   */
+  refreshToken: () => Promise<string | null>
 }
 
 export const AuthContext = createContext<AuthState | undefined>(undefined)

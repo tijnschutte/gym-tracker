@@ -18,6 +18,14 @@ export interface Session {
 // ---- Functions --------------------------------------------------------------
 
 /**
+ * Round a kg value to one decimal place. The backend cannot store arbitrary
+ * floats, and one decimal of precision is enough for weights.
+ */
+export function roundKg(kg: number): number {
+  return Math.round(kg * 10) / 10
+}
+
+/**
  * Create a new empty session with a unique ID and the current timestamp.
  */
 export function createSession(): Session {

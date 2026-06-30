@@ -17,7 +17,7 @@ import {
 } from '@/components/ui/chart'
 import type { ChartConfig } from '@/components/ui/chart'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid } from 'recharts'
-import { Loader2, ArrowLeft, TrendingUp } from 'lucide-react'
+import { Loader2, ArrowLeft, TrendingUp, Trophy } from 'lucide-react'
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -61,6 +61,25 @@ const chartConfig = {
   },
 } satisfies ChartConfig
 
+interface PersonalRecord {
+  kg: number
+  date: string
+}
+
+/** Find the heaviest logged weight (and the date it was set) for an exercise. */
+function findPersonalRecord(
+  dateMap: Record<string, number>,
+): PersonalRecord | null {
+  const entries = Object.entries(dateMap)
+  if (entries.length === 0) return null
+
+  let best = entries[0]
+  for (const entry of entries) {
+    if (entry[1] > best[1]) best = entry
+  }
+  return { kg: best[1], date: formatShortDate(parseDateString(best[0])) }
+}
+
 // ---------------------------------------------------------------------------
 // ProgressScreen
 // ---------------------------------------------------------------------------
@@ -99,6 +118,14 @@ export function ProgressScreen() {
       cancelled = true
     }
   }, [idToken])
+
+  // Only exercises the user has actually logged (non-empty history), excluding
+  // predefined exercises that have no recorded data.
+  const loggedExercises = history
+    ? Object.keys(history)
+        .filter((name) => Object.keys(history[name]).length > 0)
+        .sort((a, b) => a.localeCompare(b))
+    : []
 
   const handleSelectExercise = useCallback((name: string) => {
     setSelectedExercise(name)
@@ -155,25 +182,22 @@ export function ProgressScreen() {
           )}
 
           {/* Empty state */}
-          {!loading &&
-            !error &&
-            history &&
-            Object.keys(history).length === 0 && (
-              <Card className="w-full">
-                <CardContent className="pt-6">
-                  <p className="text-center text-sm text-muted-foreground">
-                    No progress yet. Complete your first session to start
-                    tracking!
-                  </p>
-                </CardContent>
-              </Card>
-            )}
+          {!loading && !error && history && loggedExercises.length === 0 && (
+            <Card className="w-full">
+              <CardContent className="pt-6">
+                <p className="text-center text-sm text-muted-foreground">
+                  No progress yet. Complete your first session to start
+                  tracking!
+                </p>
+              </CardContent>
+            </Card>
+          )}
 
           {/* Exercise list view */}
           {!loading &&
             !error &&
             history &&
-            Object.keys(history).length > 0 &&
+            loggedExercises.length > 0 &&
             !selectedExercise && (
               <Card className="w-full">
                 <CardHeader>
@@ -184,20 +208,18 @@ export function ProgressScreen() {
                 </CardHeader>
                 <CardContent>
                   <ul className="space-y-2">
-                    {Object.keys(history)
-                      .sort((a, b) => a.localeCompare(b))
-                      .map((name) => (
-                        <li key={name}>
-                          <button
-                            type="button"
-                            className="flex min-h-[44px] w-full items-center justify-between rounded-md bg-muted px-3 py-2 text-left transition-colors hover:bg-muted/80 active:bg-muted/60"
-                            onClick={() => handleSelectExercise(name)}
-                          >
-                            <span className="text-sm font-medium">{name}</span>
-                            <TrendingUp className="h-4 w-4 text-muted-foreground" />
-                          </button>
-                        </li>
-                      ))}
+                    {loggedExercises.map((name) => (
+                      <li key={name}>
+                        <button
+                          type="button"
+                          className="flex min-h-[44px] w-full items-center justify-between rounded-md bg-muted px-3 py-2 text-left transition-colors hover:bg-muted/80 active:bg-muted/60"
+                          onClick={() => handleSelectExercise(name)}
+                        >
+                          <span className="text-sm font-medium">{name}</span>
+                          <TrendingUp className="h-4 w-4 text-muted-foreground" />
+                        </button>
+                      </li>
+                    ))}
                   </ul>
                 </CardContent>
               </Card>
@@ -228,6 +250,7 @@ function ExerciseChart({
   dateMap: Record<string, number>
 }) {
   const data = toChartData(dateMap)
+  const pr = findPersonalRecord(dateMap)
 
   if (data.length < 2) {
     return (
@@ -235,9 +258,10 @@ function ExerciseChart({
         <CardHeader>
           <CardTitle>{exercise}</CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="flex flex-col gap-4">
+          {pr && <PersonalRecordBadge pr={pr} />}
           <p className="text-center text-sm text-muted-foreground">
-            Need at least 2 data points
+            Need at least 2 data points to chart progress
           </p>
         </CardContent>
       </Card>
@@ -250,7 +274,8 @@ function ExerciseChart({
         <CardTitle>{exercise}</CardTitle>
         <CardDescription>Weight over time</CardDescription>
       </CardHeader>
-      <CardContent>
+      <CardContent className="flex flex-col gap-4">
+        {pr && <PersonalRecordBadge pr={pr} />}
         <ChartContainer config={chartConfig}>
           <LineChart data={data} accessibilityLayer>
             <CartesianGrid vertical={false} />
@@ -285,5 +310,28 @@ function ExerciseChart({
         </ChartContainer>
       </CardContent>
     </Card>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// PersonalRecordBadge
+// ---------------------------------------------------------------------------
+
+function PersonalRecordBadge({ pr }: { pr: PersonalRecord }) {
+  return (
+    <div className="flex items-center gap-3 rounded-md bg-muted px-3 py-2.5">
+      <Trophy className="h-5 w-5 shrink-0 text-amber-500" />
+      <div className="flex flex-col">
+        <span className="text-xs font-medium text-muted-foreground">
+          Personal record
+        </span>
+        <span className="text-sm font-semibold">
+          {pr.kg} kg
+          <span className="ml-1.5 font-normal text-muted-foreground">
+            on {pr.date}
+          </span>
+        </span>
+      </div>
+    </div>
   )
 }
